@@ -1,10 +1,18 @@
+<!-- lane-hub:begin identity -->
+
 # Nathan Lane
 
 Economist at the London School of Economics, working at the intersection of economic
 development, political economy, and applied machine learning. Co-founder of the
 [Industrial Policy Group](https://industrialpolicygroup.com).
 
+<!-- lane-hub:end identity -->
+
+<!-- lane-hub:begin links -->
+
 [Website](https://nathanlane.info) · [CV](https://nathanlane.info/cv.pdf) · [ORCID](https://orcid.org/0000-0003-0884-8418)
+
+<!-- lane-hub:end links -->
 
 ## Selected work
 
