@@ -46,6 +46,13 @@ def fixture(*parts):
     return FIXTURES.joinpath(*parts).read_text(encoding="utf-8")
 
 
+def write(path, content):
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+    else:
+        path.write_text(content, encoding="utf-8")
+
+
 class StructuralTests(unittest.TestCase):
     """Rules that run on every pull request."""
 
@@ -157,17 +164,17 @@ class CliTests(unittest.TestCase):
 
     def build(self, base_text, head_text, branch, extra=None):
         git(self.repo, "init", "-q", "-b", "main")
-        (self.repo / "README.md").write_text(base_text, encoding="utf-8")
+        write(self.repo / "README.md", base_text)
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
         base = git(self.repo, "rev-parse", "HEAD").strip()
 
         git(self.repo, "switch", "-q", "-c", branch)
-        (self.repo / "README.md").write_text(head_text, encoding="utf-8")
+        write(self.repo / "README.md", head_text)
         for path, text in (extra or {}).items():
             target = self.repo / path
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+            write(target, text)
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "head")
         head = git(self.repo, "rev-parse", "HEAD").strip()
@@ -236,6 +243,16 @@ class CliTests(unittest.TestCase):
         result = self.run_checker("--base-ref", base, "--head-ref", head, "--branch", "topic/prose")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("duplicated", result.stdout)
+
+    def test_rejects_non_utf8_readme(self):
+        base, head = self.build(
+            fixture("base.md"),
+            b"<!-- lane-hub:begin identity source=0123456789abcdef0123456789abcdef01234567 -->\n\xff\xfe\n",
+            "lane-hub/profile",
+        )
+        result = self.run_checker("--base-ref", base, "--head-ref", head, "--branch", "lane-hub/profile")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("not UTF-8", result.stdout)
 
     def test_unknown_head_commit_fails_closed(self):
         base, _ = self.build(

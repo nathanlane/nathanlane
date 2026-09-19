@@ -14,7 +14,7 @@ publisher's automation branch must additionally change only ``README.md`` and
 only the two managed regions and their begin markers.
 
 This script only reads: it parses the README as text and reads git objects. It
-never imports, evaluates or runs anything from the pull request.
+never executes or evaluates repository content.
 
 Usage:
   region_check.py --base-ref <commit> --head-ref <commit> --branch <branch>
@@ -254,6 +254,7 @@ def git(repo, *args):
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="surrogateescape",
     )
     if result.returncode != 0:
         raise GitError(result.stderr.strip() or f"git {' '.join(args)} failed")
@@ -287,16 +288,17 @@ def changed_paths(repo, merge_base, head_ref):
 
 
 def file_at(repo, ref, path):
-    """The bytes of ``path`` at ``ref`` as text, or None when absent."""
+    """The UTF-8 text of ``path`` at ``ref``, or None when absent."""
     result = subprocess.run(
         ["git", "-C", repo, "show", f"{ref}:{path}"],
         capture_output=True,
-        text=True,
-        encoding="utf-8",
     )
     if result.returncode != 0:
         return None
-    return result.stdout
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        raise GitError(f"{path} at {ref} is not UTF-8 text")
 
 
 def build_parser():
@@ -335,11 +337,17 @@ def main(argv=None):
         return 1
 
     paths = []
+    try:
+        if publisher:
+            paths = changed_paths(args.repo, merge_base, args.head_ref)
+        head_text = file_at(args.repo, args.head_ref, args.readme)
+    except GitError as error:
+        print(f"✗ malformed: {error}")
+        return 1
+
     if publisher:
-        paths = changed_paths(args.repo, merge_base, args.head_ref)
         print(f"  changed files: {', '.join(paths) if paths else '(none)'}")
 
-    head_text = file_at(args.repo, args.head_ref, args.readme)
     if head_text is None:
         findings = [
             Finding("absent", f"{args.readme} is absent from the head commit {args.head_ref}")
@@ -349,7 +357,11 @@ def main(argv=None):
         findings, parsed = check_readme(head_text)
 
     if not findings and publisher:
-        base_text = file_at(args.repo, merge_base, args.readme)
+        try:
+            base_text = file_at(args.repo, merge_base, args.readme)
+        except GitError as error:
+            print(f"✗ malformed: {error}")
+            return 1
         findings = check_publisher(base_text, head_text, paths, args.readme)
 
     for finding in findings:
