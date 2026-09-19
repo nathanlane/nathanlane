@@ -1,0 +1,64 @@
+# Target-owned validation for Lane Hub updates to the profile README (issue-128).
+#
+# Runs on every pull request to main:
+#   * README.md must hold exactly one `identity` and one `links` region, each
+#     wrapped in well-formed, unnested `lane-hub` marker pairs;
+#   * both begin markers must record the same full 40-character Lane Hub
+#     source revision.
+# Pull requests from the publisher's stable automation branch must additionally:
+#   * change only README.md; and
+#   * change only the two managed regions and their begin markers.
+#
+# The helper, its tests and its fixtures live together in .github/profile-check/
+# and run on the runner's Python 3, stdlib only:
+#   python3 .github/profile-check/test_region_check.py
+#
+# PUBLISHER_BRANCH is coupled to the #129 publisher: it is the one stable branch
+# the publisher pushes and opens its pull requests from. #129 changes this value
+# and the publisher's branch together if it chooses another name.
+#
+# Trust: this workflow and its helper execute from the pull request's tree, so a
+# publisher-branch pull request judges itself with its own checker copy.
+# Publisher-branch integrity is the #129 publisher's job (it force-pushes the
+# automation branch to exactly its own tree before opening the pull request);
+# token scope, expiry, public visibility and the revert path are the remaining
+# controls. A pull_request_target redesign is explicitly out of scope.
+
+name: regions-bounded
+
+on:
+  pull_request:
+    branches: [main]
+
+# Read-only: the check inspects the repository and the pull request's git
+# objects. It references no secrets and treats the README entirely as data.
+permissions:
+  contents: read
+
+env:
+  PUBLISHER_BRANCH: lane-hub/profile
+
+jobs:
+  regions-bounded:
+    name: regions-bounded
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: regions-bounded-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out the pull request and its base history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check the README regions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          python3 .github/profile-check/region_check.py \
+            --base-ref "$BASE_SHA" \
+            --head-ref "$HEAD_SHA" \
+            --branch "$HEAD_BRANCH" \
+            --publisher-branch "$PUBLISHER_BRANCH"
