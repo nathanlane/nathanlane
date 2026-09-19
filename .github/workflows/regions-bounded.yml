@@ -16,6 +16,13 @@
 # PUBLISHER_BRANCH is coupled to the #129 publisher: it is the one stable branch
 # the publisher pushes and opens its pull requests from. #129 changes this value
 # and the publisher's branch together if it chooses another name.
+#
+# Trust: this workflow and its helper execute from the pull request's tree, so a
+# publisher-branch pull request judges itself with its own checker copy.
+# Publisher-branch integrity is the #129 publisher's job (it force-pushes the
+# automation branch to exactly its own tree before opening the pull request);
+# token scope, expiry, public visibility and the revert path are the remaining
+# controls. A pull_request_target redesign is explicitly out of scope.
 
 name: regions-bounded
 

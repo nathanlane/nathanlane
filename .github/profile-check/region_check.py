@@ -22,6 +22,13 @@ Usage:
                   [--repo .]
 
 Exit status: 0 the pull request passes, 1 it fails, 2 the arguments are unusable.
+
+Trust: this check executes from the pull request's tree, so a publisher-branch
+pull request judges itself with its own checker copy. Publisher-branch integrity
+is the #129 publisher's job (it force-pushes the automation branch to exactly
+its own tree before opening the pull request); token scope, expiry, public
+visibility and the revert path are the remaining controls. A pull_request_target
+redesign is explicitly out of scope.
 """
 
 import argparse
@@ -186,13 +193,14 @@ def skeleton(lines, regions):
 
 
 def difference(before, after):
-    """Describe the first line that differs between two line lists."""
-    for index, (left, right) in enumerate(zip(before, after)):
+    """Describe where two different line lists first part ways."""
+    if before == after:
+        raise AssertionError("difference() needs two different line lists")
+    for left, right in zip(before, after):
         if left != right:
             return f"the first changed line outside them is {left!r} -> {right!r}"
-    if len(before) != len(after):
-        return f"the patch adds or removes {abs(len(after) - len(before))} line(s) outside them"
-    return "the lines outside them differ"
+    # Everything that zips is equal, so the lists can only differ in length.
+    return f"the patch adds or removes {abs(len(after) - len(before))} line(s) outside them"
 
 
 def check_publisher(base_text, head_text, changed, readme_name=DEFAULT_README):
@@ -274,6 +282,7 @@ def require_commit(repo, ref):
 
 
 def resolve_merge_base(repo, base_ref, head_ref):
+    # git prints one merge base by default, so the first line is that base.
     output = git(repo, "merge-base", base_ref, head_ref).strip()
     if not output:
         raise GitError(f"{base_ref} and {head_ref} share no merge base")

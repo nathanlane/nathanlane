@@ -163,6 +163,11 @@ class CliTests(unittest.TestCase):
         self._temporary.cleanup()
 
     def build(self, base_text, head_text, branch, extra=None):
+        """Build a repository with the base on main and the head on ``branch``.
+
+        ``head_text`` is the head README; None deletes README.md in the head
+        commit, to exercise the deletion case.
+        """
         git(self.repo, "init", "-q", "-b", "main")
         write(self.repo / "README.md", base_text)
         git(self.repo, "add", "-A")
@@ -170,7 +175,10 @@ class CliTests(unittest.TestCase):
         base = git(self.repo, "rev-parse", "HEAD").strip()
 
         git(self.repo, "switch", "-q", "-c", branch)
-        write(self.repo / "README.md", head_text)
+        if head_text is None:
+            git(self.repo, "rm", "-q", "README.md")
+        else:
+            write(self.repo / "README.md", head_text)
         for path, text in (extra or {}).items():
             target = self.repo / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +261,15 @@ class CliTests(unittest.TestCase):
         result = self.run_checker("--base-ref", base, "--head-ref", head, "--branch", "lane-hub/profile")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("not UTF-8", result.stdout)
+
+    def test_rejects_publisher_deleting_the_readme(self):
+        base, head = self.build(
+            fixture("publisher", "before-deletion.md"), None, "lane-hub/profile"
+        )
+        result = self.run_checker("--base-ref", base, "--head-ref", head, "--branch", "lane-hub/profile")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("absent", result.stdout)
+        self.assertIn("README.md is absent from the head commit", result.stdout)
 
     def test_unknown_head_commit_fails_closed(self):
         base, _ = self.build(
